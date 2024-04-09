@@ -11,6 +11,6 @@ uniform mat4 pvm;
 void main()
 {
 	gl_Position = pvm*vec4(aPos, 1.0f);
-	fragColor = vec3(1.0f, 0.f, 0.f);
+	fragColor = inColor;
 	texCoords = texCords;
 }

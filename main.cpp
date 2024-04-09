@@ -56,49 +56,33 @@ void onKeyAction(GLFWwindow* win, int key, int scancode, int action, int mods)
 		}
 	}
 }
-Color object1Color = { 1.0f, 0.0f, 0.0f, 1.0f }; // Красный
-Color object2Color = { 0.0f, 1.0f, 0.0f, 1.0f }; // Зеленый
-Color object3Color = { 0.0f, 0.0f, 1.0f, 1.0f }; // Синий
-Color objectColorForIndex(int index) {
-	switch (index) {
-	case 0: return { 1.0f, 0.0f, 0.0f, 1.0f }; // Красный
-	case 1: return { 0.0f, 1.0f, 0.0f, 1.0f }; // Зеленый
-	case 2: return { 0.0f, 0.0f, 1.0f, 1.0f }; // Синий
-	default: return { 1.0f, 1.0f, 1.0f, 1.0f }; // Белый
-	}
+bool flag = false;
+glm::vec3 rayT(GLFWwindow* win)
+{
+	double xpos, ypos;
+	glfwGetCursorPos(win, &xpos, &ypos);
+	glm::vec3 view = camera.Front - camera.Position;
+	glm::normalize(view);
+	glm::vec3 horiz = glm::normalize(glm::cross(view, camera.Up));
+	glm::vec3 vert = glm::normalize(glm::cross(horiz, view));
+	float rad = glm::radians(camera.Fov);
+	float height = tan(rad / 2) * camera.zNear;
+	float width = height * (camera.AspectRatio);
+	vert *= height;
+	horiz *= width;
+
+	xpos -= 1280.0f / 2.0f;
+	ypos -= 720.0f / 2.0f;
+
+	// Скалируем координаты
+	xpos /= (1280.0f / 2.0f);
+	ypos /= (720.0f / 2.0f);
+
+	glm::vec3 cursorPos = camera.Position + view * camera.zNear + horiz * (float)xpos + vert * (float)ypos;
+	glm::vec3 rayDir = glm::normalize(cursorPos - camera.Position);
+	return rayDir;
 }
-void onMouseClick(GLFWwindow* win, int button, int action, int mods) {
-	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-		double mouseX, mouseY;
-		glfwGetCursorPos(win, &mouseX, &mouseY);
-
-		int screenWidth, screenHeight;
-		glfwGetFramebufferSize(win, &screenWidth, &screenHeight);
-
-		int x = (int)mouseX;
-		int y = screenHeight - (int)mouseY - 1;
-
-		unsigned char pixelColor[4];
-		glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixelColor);
-
-		int objectIndex = -1;
-		Color pickedColor = { pixelColor[0] / 255.0f, pixelColor[1] / 255.0f, pixelColor[2] / 255.0f, pixelColor[3] / 255.0f };
-		for (int i = 0; i < 3; i++) {
-			Color objectColor = objectColorForIndex(i);
-			if (pickedColor.r == objectColor.r && pickedColor.g == objectColor.g &&
-				pickedColor.b == objectColor.b && pickedColor.a == objectColor.a) {
-				objectIndex = i;
-				break;
-			}
-		}
-
-		if (objectIndex != -1) {
-			cout << "Object " << objectIndex + 1 << " selected!" << endl;
-		}
-	}
-}
-
-void processInput(GLFWwindow* win, double dt)
+void processInput(GLFWwindow* win, double dt, glm::vec3 &d)
 {
 	if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(win, true);
@@ -108,6 +92,11 @@ void processInput(GLFWwindow* win, double dt)
 		background = { 0.f, 1.f, 0.f, 1.f };
 	if (glfwGetKey(win, GLFW_KEY_3) == GLFW_PRESS)
 		background = { 0.f, 0.f, 1.f, 1.f };
+	
+	if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT ) == GLFW_PRESS)
+	{
+		d = rayT(win);
+	}
 	uint32_t dir = 0;
 	if (glfwGetKey(win, GLFW_KEY_PAGE_UP) == GLFW_PRESS)
 		dir |= CAM_UP;
@@ -128,10 +117,33 @@ void processInput(GLFWwindow* win, double dt)
 	x = newx;
 	y = newy;
 	camera.Move(dir, dt);
-	camera.Rotate(xoffset, -yoffset);
+	//camera.Rotate(xoffset, -yoffset);
 }
+bool rayBoxIntersection(const glm::vec3& rayOrigin, const glm::vec3& rayDirection, const glm::vec3& boxMin, const glm::vec3& boxMax)
+{
+	glm::vec3 invDir = 1.0f / rayDirection;
+	glm::vec3 tMin = (boxMin - rayOrigin) * invDir;
+	glm::vec3 tMax = (boxMax - rayOrigin) * invDir;
+
+	glm::vec3 t1 = glm::min(tMin, tMax);
+	glm::vec3 t2 = glm::max(tMin, tMax);
+
+	float tNear = glm::max(glm::max(t1.x, t1.y), t1.z);
+	float tFar = glm::min(glm::min(t2.x, t2.y), t2.z);
+
+	return tNear <= tFar;
+}
+struct Object {
+	ModelTransform transform;
+	unsigned int VAO;
+	unsigned int texture;
+	int numIndices;
+};
+
+
 int main()
 {
+	Object objects[3];
 #pragma region WIN INIT
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -155,10 +167,10 @@ int main()
 	glfwSetFramebufferSizeCallback(win, Resize);
 	glfwSetScrollCallback(win, onScroll);
 	glfwSetKeyCallback(win, onKeyAction);
-	glfwSetMouseButtonCallback(win, onMouseClick);
+	
 	glViewport(0, 0, 1280, 720);
 	glEnable(GL_DEPTH_TEST);
-	//glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	/*glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);*/
 	UpdatePolygonMode();
 	glEnable(GL_CULL_FACE);
 	glFrontFace(GL_CW); 
@@ -238,7 +250,7 @@ int main()
 	Shader* polygon_shader = new Shader("Shaders\\basic.vert", "Shaders\\basic.frag");
 	
 	double oldTime = glfwGetTime(), newTime, deltaTime;
-
+	glm::vec3 dir;
 	while (!glfwWindowShouldClose(win))
 	{
 		//fps
@@ -246,7 +258,8 @@ int main()
 		deltaTime = newTime - oldTime;
 		oldTime = newTime;
 
-		processInput(win, deltaTime);
+		processInput(win, deltaTime, dir);
+		
 		polygonTrans.rotation.z = glfwGetTime() * 70.0;
 		//polygonTrans.rotation.x = glfwGetTime() * 45.0;
 		polygonTrans.pos.x = 0.8f * cos(glfwGetTime()*3);
@@ -276,50 +289,46 @@ int main()
 
 
 		//1
-		glm::mat4 model = glm::mat4(1.0f);
+		objects[0].transform = polygonTrans;
+		objects[0].texture = box_texture;
+		objects[0].numIndices = 36;
 
+		objects[1].transform = polygonTrans2;
+		objects[1].texture = box_texture;
+		objects[1].numIndices = 36;
 
-		model = glm::translate(model, polygonTrans.pos);
-		model = glm::rotate(model, glm::radians(polygonTrans.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-		model = glm::rotate(model, glm::radians(polygonTrans.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-		model = glm::rotate(model, glm::radians(polygonTrans.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-		model = glm::scale(model, polygonTrans.scale);
+		objects[2].transform = polygonTrans3;
+		objects[2].texture = box_texture;
+		objects[2].numIndices = 36;
 
+		// Цикл рендеринга
+		for (int i = 0; i < 3; i++) {
+			Object& obj = objects[i];
 
-		glm::mat4 pvm = pv * model;
+			obj.transform.pos;
+			bool intersects = rayBoxIntersection(camera.Position, dir, obj.transform.pos - obj.transform.scale, obj.transform.pos + obj.transform.scale);
+			if (intersects)
+			{
+				cout << i << endl;
+				intersects = false;
+			}
+			glm::mat4 model = glm::mat4(1.0f);
+			model = glm::translate(model, obj.transform.pos);
+			model = glm::rotate(model, glm::radians(obj.transform.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+			model = glm::rotate(model, glm::radians(obj.transform.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+			model = glm::rotate(model, glm::radians(obj.transform.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+			model = glm::scale(model, obj.transform.scale);
 
-		polygon_shader->SetMatrix4F("pvm", pvm);
-		polygon_shader->setBool("wireframeMode", wireframeMode);
+			glm::mat4 pvm = pv * model;
+			glm::vec3 distance = obj.transform.pos - camera.Position;
 
-		glBindTexture(GL_TEXTURE_2D, box_texture);
-		glBindVertexArray(VAO_polygon);
-		glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+			polygon_shader->SetMatrix4F("pvm", pvm);
+			polygon_shader->setBool("wireframeMode", wireframeMode);
 
-		//2
-		model = glm::mat4(1.0f);
-		model = glm::translate(model, polygonTrans2.pos);
-		model = glm::rotate(model, glm::radians(polygonTrans2.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-		model = glm::rotate(model, glm::radians(polygonTrans2.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-		model = glm::rotate(model, glm::radians(polygonTrans2.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-		model = glm::scale(model, polygonTrans2.scale);
-		pvm = pv * model;
-		polygon_shader->SetMatrix4F("pvm", pvm);
-		polygon_shader->setBool("wireframeMode", wireframeMode);
-
-		glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
-
-		//3
-		model = glm::mat4(1.0f);
-		model = glm::translate(model, polygonTrans3.pos);
-		model = glm::rotate(model, glm::radians(polygonTrans3.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-		model = glm::rotate(model, glm::radians(polygonTrans3.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-		model = glm::rotate(model, glm::radians(polygonTrans3.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-		model = glm::scale(model, polygonTrans3.scale);
-		pvm = pv * model;
-		polygon_shader->SetMatrix4F("pvm", pvm);
-		polygon_shader->setBool("wireframeMode", wireframeMode);
-
-		glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+			glBindTexture(GL_TEXTURE_2D, obj.texture);
+			glBindVertexArray(VAO_polygon);
+			glDrawElements(GL_TRIANGLES, obj.numIndices, GL_UNSIGNED_INT, 0);
+		}
 
 		glfwSwapBuffers(win);
 		glfwPollEvents();
