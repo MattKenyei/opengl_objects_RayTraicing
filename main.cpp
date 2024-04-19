@@ -1,5 +1,6 @@
 #include "Shader.h"
 #include "Camera.h"
+#include <chrono>
 #include <GLFW/glfw3.h>
 #include <fstream>
 #define STB_IMAGE_IMPLEMENTATION
@@ -57,6 +58,7 @@ void onKeyAction(GLFWwindow* win, int key, int scancode, int action, int mods)
 	}
 }
 bool flag = false;
+bool Time = false;
 glm::vec3 rayT(GLFWwindow* win)
 {
 	double xpos, ypos;
@@ -96,6 +98,7 @@ void processInput(GLFWwindow* win, double dt, glm::vec3 &d)
 	if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT ) == GLFW_PRESS)
 	{
 		d = rayT(win);
+		Time = true;
 	}
 	uint32_t dir = 0;
 	if (glfwGetKey(win, GLFW_KEY_PAGE_UP) == GLFW_PRESS)
@@ -143,7 +146,7 @@ struct Object {
 
 int main()
 {
-	Object objects[3];
+	Object objects[10000];
 #pragma region WIN INIT
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -203,10 +206,9 @@ int main()
 		4, 7, 5,
 		5, 7, 6
 	};
-
-	ModelTransform polygonTrans = { glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(1.0f, 1.0f, 1.0f)};
-	ModelTransform polygonTrans2 = { glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(1.0f, 1.0f, 1.0f)};
-	ModelTransform polygonTrans3 = { glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(1.0f, 1.0f, 1.0f)};
+	ModelTransform pol[10000];
+	for (auto &i : pol)
+		i = { glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(1.0f, 1.0f, 1.0f) };
 
 #pragma region BUFFERS INITIALIZATION
 	unsigned int box_texture;
@@ -251,6 +253,13 @@ int main()
 	
 	double oldTime = glfwGetTime(), newTime, deltaTime;
 	glm::vec3 dir;
+	float zpos = 0;
+	for (auto &i : pol)
+	{
+		i.setScale(0.2f);
+		/*i.pos.z += zpos;
+		zpos += 0.5;*/
+	}
 	while (!glfwWindowShouldClose(win))
 	{
 		//fps
@@ -259,22 +268,6 @@ int main()
 		oldTime = newTime;
 
 		processInput(win, deltaTime, dir);
-		
-		polygonTrans.rotation.z = glfwGetTime() * 70.0;
-		//polygonTrans.rotation.x = glfwGetTime() * 45.0;
-		polygonTrans.pos.x = 0.8f * cos(glfwGetTime()*3);
-		polygonTrans.pos.y = 0.8f * sin(glfwGetTime()*3);
-		polygonTrans.setScale(0.2f);
-		polygonTrans2.rotation.z = glfwGetTime() * 30.0;
-		//polygonTrans2.rotation.y = glfwGetTime() * 45.0;
-		polygonTrans2.pos.x = 0.8f * cos(glfwGetTime()*3 + 3.14159f);
-		polygonTrans2.pos.y = 0.8f * sin(glfwGetTime()*3 + 3.14159f);
-		polygonTrans2.setScale(0.2f);
-
-
-		//polygonTrans3.rotation.x = glfwGetTime() * 90.0;
-		//polygonTrans3.rotation.y = glfwGetTime() * 60.0;
-		polygonTrans3.setScale(0.2f);
 
 		glClearColor(background.r, background.g, background.b, background.a);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -282,36 +275,21 @@ int main()
 
 		polygon_shader->use();
 
-		//camera.Rotate(glfwGetTime(), 0);
-
-
 		glm::mat4 pv = camera.GetProjectionMatrix() * camera.GetViewMatrix();
 
-
-		//1
-		objects[0].transform = polygonTrans;
-		objects[0].texture = box_texture;
-		objects[0].numIndices = 36;
-
-		objects[1].transform = polygonTrans2;
-		objects[1].texture = box_texture;
-		objects[1].numIndices = 36;
-
-		objects[2].transform = polygonTrans3;
-		objects[2].texture = box_texture;
-		objects[2].numIndices = 36;
+		for (size_t index = 0; index < sizeof(objects) / sizeof(objects[0]); index++)
+		{
+			auto& obj = objects[index];
+			obj.transform = pol[index];
+			obj.texture = box_texture;
+			obj.numIndices = 36;
+		}
 
 		// Цикл рендеринга
-		for (int i = 0; i < 3; i++) {
+		for (int i = 0; i < 10000; i++) {
 			Object& obj = objects[i];
 
-			obj.transform.pos;
-			bool intersects = rayBoxIntersection(camera.Position, dir, obj.transform.pos - obj.transform.scale, obj.transform.pos + obj.transform.scale);
-			if (intersects)
-			{
-				cout << i << endl;
-				intersects = false;
-			}
+			
 			glm::mat4 model = glm::mat4(1.0f);
 			model = glm::translate(model, obj.transform.pos);
 			model = glm::rotate(model, glm::radians(obj.transform.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -329,7 +307,29 @@ int main()
 			glBindVertexArray(VAO_polygon);
 			glDrawElements(GL_TRIANGLES, obj.numIndices, GL_UNSIGNED_INT, 0);
 		}
+		if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+		{
+			auto start = std::chrono::high_resolution_clock::now();
+			for (int i = 0; i < 10000; i++)
+			{
+				Object& obj = objects[i];
 
+				if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+				{
+					bool intersects = rayBoxIntersection(camera.Position, dir, obj.transform.pos - obj.transform.scale, obj.transform.pos + obj.transform.scale);
+					if (intersects)
+					{
+						//cout << i << endl;
+						intersects = false;
+					}
+
+				}
+			}
+
+			auto end = std::chrono::high_resolution_clock::now();
+			std::chrono::duration<double> duration = end - start;
+			std::cout << "Execution time: " << duration.count()*1000 << " seconds." << std::endl;
+		}
 		glfwSwapBuffers(win);
 		glfwPollEvents();
 	}
