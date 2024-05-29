@@ -1,10 +1,11 @@
-#include "Shader.h"
+﻿#include "Shader.h"
 #include "Camera.h"
 #include <chrono>
 #include <GLFW/glfw3.h>
 #include <fstream>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+
 using namespace std;
 typedef unsigned char byte;
 struct ModelTransform
@@ -62,26 +63,32 @@ bool Time = false;
 glm::vec3 rayT(GLFWwindow* win)
 {
 	double xpos, ypos;
-	glfwGetCursorPos(win, &xpos, &ypos);
-	glm::vec3 view = camera.Front - camera.Position;
+	glfwGetCursorPos(win, &xpos, &ypos); // получение позиций курсора
+	glm::vec3 view = camera.Front - camera.Position; // направление камеры
 	glm::normalize(view);
-	glm::vec3 horiz = glm::normalize(glm::cross(view, camera.Up));
-	glm::vec3 vert = glm::normalize(glm::cross(horiz, view));
-	float rad = glm::radians(camera.Fov);
-	float height = tan(rad / 2) * camera.zNear;
-	float width = height * (camera.AspectRatio);
+	glm::vec3 horiz = glm::normalize(glm::cross(view, camera.Up)); // определение горизонтального сдвига положения
+	glm::vec3 vert = glm::normalize(glm::cross(horiz, view)); // определение вертикального сдвига положения
+	float rad = glm::radians(camera.Fov); // конвертируем угол обзора в радианы
+	float height = tan(rad / 2) * camera.zNear; //высота области видимости
+	float width = height * (camera.AspectRatio); //ширина области видимости
+
+	//итоговые векторы, представляющие вертикальную и горизонтальную компоненты размеров области видимости относительно камеры.
 	vert *= height;
 	horiz *= width;
 
+	// переносим координаты курсора так, чтобы отсчет шел из центра,
 	xpos -= 1280.0f / 2.0f;
 	ypos -= 720.0f / 2.0f;
 
-	// ��������� ����������
+	// скалируем координаты так, чтобы координаты экрана находились в
+	// пространстве [-1, 1}
 	xpos /= (1280.0f / 2.0f);
 	ypos /= (720.0f / 2.0f);
 
-	glm::vec3 cursorPos = camera.Position + view * camera.zNear + horiz * (float)xpos + vert * (float)ypos;
-	glm::vec3 rayDir = glm::normalize(cursorPos - camera.Position);
+	// расчитываем координаты точки, куда указывает курсор,
+	// на плоскости ближнего отсечения
+	glm::vec3 Pos = camera.Position + view * camera.zNear + horiz * (float)xpos + vert * (float)ypos;
+	glm::vec3 rayDir = glm::normalize(Pos - camera.Position); // вектор трассирующего луча
 	return rayDir;
 }
 void processInput(GLFWwindow* win, double dt, glm::vec3 &d)
@@ -98,6 +105,7 @@ void processInput(GLFWwindow* win, double dt, glm::vec3 &d)
 	if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT ) == GLFW_PRESS)
 	{
 		d = rayT(win);
+
 		Time = true;
 	}
 	uint32_t dir = 0;
@@ -124,15 +132,15 @@ void processInput(GLFWwindow* win, double dt, glm::vec3 &d)
 }
 bool rayBoxIntersection(const glm::vec3& rayOrigin, const glm::vec3& rayDirection, const glm::vec3& boxMin, const glm::vec3& boxMax)
 {
-	glm::vec3 invDir = 1.0f / rayDirection;
-	glm::vec3 tMin = (boxMin - rayOrigin) * invDir;
-	glm::vec3 tMax = (boxMax - rayOrigin) * invDir;
+	glm::vec3 invDir = 1.0f / rayDirection; // вычисление обратного направления луча
+	glm::vec3 tMin = (boxMin - rayOrigin) * invDir; 
+	glm::vec3 tMax = (boxMax - rayOrigin) * invDir; 
 
-	glm::vec3 t1 = glm::min(tMin, tMax);
-	glm::vec3 t2 = glm::max(tMin, tMax);
+	glm::vec3 t1 = glm::min(tMin, tMax); // минимальные координаты пересечения
+	glm::vec3 t2 = glm::max(tMin, tMax); // максимальные координаты пересечения
 
-	float tNear = glm::max(glm::max(t1.x, t1.y), t1.z);
-	float tFar = glm::min(glm::min(t2.x, t2.y), t2.z);
+	float tNear = glm::max(glm::max(t1.x, t1.y), t1.z); //ближайшая точка пересечения с лучом
+	float tFar = glm::min(glm::min(t2.x, t2.y), t2.z); //дальняя точка пересечения с лучом
 
 	return tNear <= tFar;
 }
@@ -141,12 +149,13 @@ struct Object {
 	unsigned int VAO;
 	unsigned int texture;
 	int numIndices;
+	bool shouldRemove = false;
 };
 
 
 int main()
 {
-	Object objects[10000];
+	Object objects[1000];
 #pragma region WIN INIT
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -206,7 +215,7 @@ int main()
 		4, 7, 5,
 		5, 7, 6
 	};
-	ModelTransform pol[10000];
+	ModelTransform pol[1000];
 	for (auto &i : pol)
 		i = { glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(1.0f, 1.0f, 1.0f) };
 
@@ -227,14 +236,14 @@ int main()
 	//glGenerateMipmap(GL_TEXTURE_2D);
 	stbi_image_free(data);
 
-	//��������
+	//полигоны
 	unsigned int VBO_polygon, VAO_polygon,  EBO_polygon;
 	glGenBuffers(1, &VBO_polygon);
 	glGenBuffers(1, &EBO_polygon);
 	glGenVertexArrays(1, &VAO_polygon);
 
 	glBindVertexArray(VAO_polygon);
-	//�������� ���
+	//загрузка вбо
 	glBindBuffer(GL_ARRAY_BUFFER, VBO_polygon);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * verts * 8, cube, GL_STATIC_DRAW);
 	
@@ -257,15 +266,19 @@ int main()
 	for (auto &i : pol)
 	{
 		i.setScale(0.2f);
-		/*i.pos.z += zpos;
-		zpos += 0.5;*/
+		i.pos.z += zpos;
+		zpos += 0.5;
 	}
+	auto startTime = chrono::high_resolution_clock::now();
 	while (!glfwWindowShouldClose(win))
 	{
 		//fps
 		newTime = glfwGetTime();
 		deltaTime = newTime - oldTime;
 		oldTime = newTime;
+
+		auto currentTime = chrono::high_resolution_clock::now();
+		float time = chrono::duration<float>(currentTime - startTime).count();
 
 		processInput(win, deltaTime, dir);
 
@@ -285,9 +298,11 @@ int main()
 			obj.numIndices = 36;
 		}
 
-		// ���� ����������
-		for (int i = 0; i < 10000; i++) {
+		// Цикл рендеринга
+		for (int i = 0; i < 1000; i++) {
 			Object& obj = objects[i];
+			if (objects[i].shouldRemove)
+				continue;
 
 			
 			glm::mat4 model = glm::mat4(1.0f);
@@ -301,6 +316,7 @@ int main()
 			glm::vec3 distance = obj.transform.pos - camera.Position;
 
 			polygon_shader->SetMatrix4F("pvm", pvm);
+			polygon_shader->setFloat("time", time);
 			polygon_shader->setBool("wireframeMode", wireframeMode);
 
 			glBindTexture(GL_TEXTURE_2D, obj.texture);
@@ -310,7 +326,7 @@ int main()
 		if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
 		{
 			auto start = std::chrono::high_resolution_clock::now();
-			for (int i = 0; i < 10000; i++)
+			for (int i = 0; i < 1000; i++)
 			{
 				Object& obj = objects[i];
 
@@ -321,6 +337,7 @@ int main()
 					{
 						//cout << i << endl;
 						intersects = false;
+						objects[i].shouldRemove = true;
 					}
 
 				}
@@ -328,7 +345,7 @@ int main()
 
 			auto end = std::chrono::high_resolution_clock::now();
 			std::chrono::duration<double> duration = end - start;
-			std::cout << "Execution time: " << duration.count()*1000 << " seconds." << std::endl;
+			std::cout << "Execution time: " << duration.count()*1000 << " milliseconds." << std::endl;
 		}
 		glfwSwapBuffers(win);
 		glfwPollEvents();
