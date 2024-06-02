@@ -1,6 +1,7 @@
 ﻿#include "Shader.h"
 #include "Camera.h"
 #include <chrono>
+#include "gl/GL.h"
 #include <GLFW/glfw3.h>
 #include <fstream>
 #define STB_IMAGE_IMPLEMENTATION
@@ -28,7 +29,7 @@ struct Color {
 bool wireframeMode = false;
 void UpdatePolygonMode()
 {
-	if(wireframeMode)
+	if (wireframeMode)
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 	else
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -50,7 +51,7 @@ void onKeyAction(GLFWwindow* win, int key, int scancode, int action, int mods)
 	{
 		switch (key)
 		{
-		case GLFW_KEY_SPACE: 
+		case GLFW_KEY_SPACE:
 			wireframeMode = !wireframeMode;
 			UpdatePolygonMode();
 			break;
@@ -91,7 +92,7 @@ glm::vec3 rayT(GLFWwindow* win)
 	glm::vec3 rayDir = glm::normalize(Pos - camera.Position); // вектор трассирующего луча
 	return rayDir;
 }
-void processInput(GLFWwindow* win, double dt, glm::vec3 &d)
+void processInput(GLFWwindow* win, double dt, glm::vec3& d)
 {
 	if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(win, true);
@@ -101,8 +102,12 @@ void processInput(GLFWwindow* win, double dt, glm::vec3 &d)
 		background = { 0.f, 1.f, 0.f, 1.f };
 	if (glfwGetKey(win, GLFW_KEY_3) == GLFW_PRESS)
 		background = { 0.f, 0.f, 1.f, 1.f };
-	
-	if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT ) == GLFW_PRESS)
+	if (glfwGetKey(win, GLFW_KEY_4) == GLFW_PRESS)
+		background = { 255.f, 255.f, 255.f, 1.f };
+	if (glfwGetKey(win, GLFW_KEY_5) == GLFW_PRESS)
+		background = { 0.f, 0.f, 0.f, 1.f };
+
+	if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
 	{
 		d = rayT(win);
 
@@ -133,8 +138,8 @@ void processInput(GLFWwindow* win, double dt, glm::vec3 &d)
 bool rayBoxIntersection(const glm::vec3& rayOrigin, const glm::vec3& rayDirection, const glm::vec3& boxMin, const glm::vec3& boxMax)
 {
 	glm::vec3 invDir = 1.0f / rayDirection; // вычисление обратного направления луча
-	glm::vec3 tMin = (boxMin - rayOrigin) * invDir; 
-	glm::vec3 tMax = (boxMax - rayOrigin) * invDir; 
+	glm::vec3 tMin = (boxMin - rayOrigin) * invDir;
+	glm::vec3 tMax = (boxMax - rayOrigin) * invDir;
 
 	glm::vec3 t1 = glm::min(tMin, tMax); // минимальные координаты пересечения
 	glm::vec3 t2 = glm::max(tMin, tMax); // максимальные координаты пересечения
@@ -149,13 +154,13 @@ struct Object {
 	unsigned int VAO;
 	unsigned int texture;
 	int numIndices;
-	bool shouldRemove = false;
+	bool useEffect = false;
 };
 
 
 int main()
 {
-	Object objects[1000];
+	Object objects[1];
 #pragma region WIN INIT
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -179,24 +184,24 @@ int main()
 	glfwSetFramebufferSizeCallback(win, Resize);
 	glfwSetScrollCallback(win, onScroll);
 	glfwSetKeyCallback(win, onKeyAction);
-	
+
 	glViewport(0, 0, 1280, 720);
 	glEnable(GL_DEPTH_TEST);
 	/*glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);*/
 	UpdatePolygonMode();
 	glEnable(GL_CULL_FACE);
-	glFrontFace(GL_CW); 
+	glFrontFace(GL_CW);
 #pragma endregion
 	int box_width, box_height, channels;
 	byte* data = stbi_load("images\\box.png", &box_width, &box_height, &channels, 0);
 	const int verts = 8;
-	float cube[verts*8] = {
+	float cube[verts * 8] = {
 		-1.0f, 1.0f, -1.0f,		1.0f, 0.0f, 0.0f,		0.f, 1.f,
 		1.0f, 1.0f, -1.0f,		0.5f, 0.5f, 0.0f,		1.f, 1.f,
 		1.0f, 1.0f, 1.0f,		0.0f, 1.0f, 0.0f,		1.f, 0.f,
 		-1.0f, 1.0f, 1.0f,		0.0f, 0.5f, 0.5f,		0.f, 0.f,
 		-1.0f, -1.0f, -1.0f,	0.0f, 0.0f, 1.0f,		1.f, 0.f,
-		1.0f, -1.0f, -1.0f,		0.5f, 0.0f, 0.5f,		0.f, 0.f,	
+		1.0f, -1.0f, -1.0f,		0.5f, 0.0f, 0.5f,		0.f, 0.f,
 		1.0f, -1.0f, 1.0f,		0.5f, 0.5f, 0.5f,		0.f, 1.f,
 		-1.0f, -1.0f, 1.0f,		1.0f, 1.0f, 1.0f,		1.f, 1.f
 	};
@@ -215,8 +220,8 @@ int main()
 		4, 7, 5,
 		5, 7, 6
 	};
-	ModelTransform pol[1000];
-	for (auto &i : pol)
+	ModelTransform pol[1];
+	for (auto& i : pol)
 		i = { glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(1.0f, 1.0f, 1.0f) };
 
 #pragma region BUFFERS INITIALIZATION
@@ -228,7 +233,7 @@ int main()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	if(channels == 3)
+	if (channels == 3)
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, box_width, box_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
 	else
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, box_width, box_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
@@ -237,7 +242,7 @@ int main()
 	stbi_image_free(data);
 
 	//полигоны
-	unsigned int VBO_polygon, VAO_polygon,  EBO_polygon;
+	unsigned int VBO_polygon, VAO_polygon, EBO_polygon;
 	glGenBuffers(1, &VBO_polygon);
 	glGenBuffers(1, &EBO_polygon);
 	glGenVertexArrays(1, &VAO_polygon);
@@ -246,7 +251,7 @@ int main()
 	//загрузка вбо
 	glBindBuffer(GL_ARRAY_BUFFER, VBO_polygon);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * verts * 8, cube, GL_STATIC_DRAW);
-	
+
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO_polygon);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * 36, indices, GL_STATIC_DRAW);
 
@@ -259,11 +264,11 @@ int main()
 	glEnableVertexAttribArray(2);
 #pragma endregion
 	Shader* polygon_shader = new Shader("Shaders\\basic.vert", "Shaders\\basic.frag");
-	
+
 	double oldTime = glfwGetTime(), newTime, deltaTime;
 	glm::vec3 dir;
 	float zpos = 0;
-	for (auto &i : pol)
+	for (auto& i : pol)
 	{
 		i.setScale(0.2f);
 		i.pos.z += zpos;
@@ -299,12 +304,8 @@ int main()
 		}
 
 		// Цикл рендеринга
-		for (int i = 0; i < 1000; i++) {
+		for (int i = 0; i < 1; i++) {
 			Object& obj = objects[i];
-			if (objects[i].shouldRemove)
-				continue;
-
-			
 			glm::mat4 model = glm::mat4(1.0f);
 			model = glm::translate(model, obj.transform.pos);
 			model = glm::rotate(model, glm::radians(obj.transform.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -318,6 +319,7 @@ int main()
 			polygon_shader->SetMatrix4F("pvm", pvm);
 			polygon_shader->setFloat("time", time);
 			polygon_shader->setBool("wireframeMode", wireframeMode);
+			polygon_shader->setBool("useEffect", objects[i].useEffect);
 
 			glBindTexture(GL_TEXTURE_2D, obj.texture);
 			glBindVertexArray(VAO_polygon);
@@ -326,7 +328,7 @@ int main()
 		if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
 		{
 			auto start = std::chrono::high_resolution_clock::now();
-			for (int i = 0; i < 1000; i++)
+			for (int i = 0; i < 1; i++)
 			{
 				Object& obj = objects[i];
 
@@ -337,7 +339,9 @@ int main()
 					{
 						//cout << i << endl;
 						intersects = false;
-						objects[i].shouldRemove = true;
+						if (!objects[i].useEffect)
+							objects[i].useEffect = true;
+						else objects[i].useEffect = false;
 					}
 
 				}
@@ -345,7 +349,7 @@ int main()
 
 			auto end = std::chrono::high_resolution_clock::now();
 			std::chrono::duration<double> duration = end - start;
-			std::cout << "Execution time: " << duration.count()*1000 << " milliseconds." << std::endl;
+			//std::cout << "Execution time: " << duration.count() * 1000 << " milliseconds." << std::endl;
 		}
 		glfwSwapBuffers(win);
 		glfwPollEvents();
