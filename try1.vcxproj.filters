@@ -25,6 +25,12 @@
     <None Include="Shaders\basic.vert">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="Shaders\light.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\light.frag">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">

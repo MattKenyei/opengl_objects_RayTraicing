@@ -5,12 +5,9 @@
 #include <fstream>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
-
-using namespace std;
-typedef unsigned char byte;
 struct ModelTransform
 {
-	glm::vec3 pos;
+	glm::vec3 position;
 	glm::vec3 rotation;
 	glm::vec3 scale;
 
@@ -20,95 +17,56 @@ struct ModelTransform
 		scale.y = s;
 		scale.z = s;
 	}
-
 };
+
 struct Color {
 	float r, g, b, a;
 };
-bool wireframeMode = false;
-void UpdatePolygonMode()
-{
-	if(wireframeMode)
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-	else
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-}
+struct Material {
+	glm::vec3 ambient;
+	glm::vec3 diffuse;
+	glm::vec3 specular;
+	float shininess;
+};
+struct PointLight {
+	glm::vec3 position;
+	glm::vec3 ambient;
+	glm::vec3 diffuse;
+	glm::vec3 specular;
+
+	float constant;
+	float linear;
+	float quadratic;
+};
+struct DirectionalLight {
+	glm::vec3 direction;
+	glm::vec3 ambient;
+	glm::vec3 diffuse;
+	glm::vec3 specular;
+};
 Color background = { 0.f, 0.f, 0.f, 1.f };
+
 Camera camera(glm::vec3(0.f, 0.f, -2.f));
-void Resize(GLFWwindow* win, int width, int height)
+
+void OnResize(GLFWwindow* win, int width, int height)
 {
 	glViewport(0, 0, width, height);
 }
-void onScroll(GLFWwindow* win, double x, double y)
-{
-	camera.ChangeFOV(y);
-}
-void onKeyAction(GLFWwindow* win, int key, int scancode, int action, int mods)
-{
-	if (action == GLFW_PRESS)
-	{
-		switch (key)
-		{
-		case GLFW_KEY_SPACE: 
-			wireframeMode = !wireframeMode;
-			UpdatePolygonMode();
-			break;
 
-		}
-	}
-}
-bool flag = false;
-bool Time = false;
-glm::vec3 rayT(GLFWwindow* win)
-{
-	double xpos, ypos;
-	glfwGetCursorPos(win, &xpos, &ypos); // получение позиций курсора
-	glm::vec3 view = camera.Front - camera.Position; // направление камеры
-	glm::normalize(view);
-	glm::vec3 horiz = glm::normalize(glm::cross(view, camera.Up)); // определение горизонтального сдвига положения
-	glm::vec3 vert = glm::normalize(glm::cross(horiz, view)); // определение вертикального сдвига положения
-	float rad = glm::radians(camera.Fov); // конвертируем угол обзора в радианы
-	float height = tan(rad / 2) * camera.zNear; //высота области видимости
-	float width = height * (camera.AspectRatio); //ширина области видимости
-
-	//итоговые векторы, представляющие вертикальную и горизонтальную компоненты размеров области видимости относительно камеры.
-	vert *= height;
-	horiz *= width;
-
-	// переносим координаты курсора так, чтобы отсчет шел из центра,
-	xpos -= 1280.0f / 2.0f;
-	ypos -= 720.0f / 2.0f;
-
-	// скалируем координаты так, чтобы координаты экрана находились в
-	// пространстве [-1, 1}
-	xpos /= (1280.0f / 2.0f);
-	ypos /= (720.0f / 2.0f);
-
-	// расчитываем координаты точки, куда указывает курсор,
-	// на плоскости ближнего отсечения
-	glm::vec3 Pos = camera.Position + view * camera.zNear + horiz * (float)xpos + vert * (float)ypos;
-	glm::vec3 rayDir = glm::normalize(Pos - camera.Position); // вектор трассирующего луча
-	return rayDir;
-}
-void processInput(GLFWwindow* win, double dt, glm::vec3 &d)
+void processInput(GLFWwindow* win, double dt)
 {
 	if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(win, true);
 	if (glfwGetKey(win, GLFW_KEY_1) == GLFW_PRESS)
-		background = { 1.f, 0.f, 0.f, 1.f };
+		background = { 1.0f, 0.0f, 0.0f, 1.0f };
 	if (glfwGetKey(win, GLFW_KEY_2) == GLFW_PRESS)
-		background = { 0.f, 1.f, 0.f, 1.f };
+		background = { 0.0f, 1.0f, 0.0f, 1.0f };
 	if (glfwGetKey(win, GLFW_KEY_3) == GLFW_PRESS)
-		background = { 0.f, 0.f, 1.f, 1.f };
-	
-	if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT ) == GLFW_PRESS)
-	{
-		d = rayT(win);
+		background = { 0.0f, 0.0f, 1.0f, 1.0f };
 
-		Time = true;
-	}
 	uint32_t dir = 0;
+
 	if (glfwGetKey(win, GLFW_KEY_PAGE_UP) == GLFW_PRESS)
 		dir |= CAM_UP;
 	if (glfwGetKey(win, GLFW_KEY_PAGE_DOWN) == GLFW_PRESS)
@@ -121,42 +79,56 @@ void processInput(GLFWwindow* win, double dt, glm::vec3 &d)
 		dir |= CAM_LEFT;
 	if (glfwGetKey(win, GLFW_KEY_D) == GLFW_PRESS)
 		dir |= CAM_RIGHT;
-	static double  newx = 0.f, newy = 0.f;
+
+	double newx = 0.f, newy = 0.f;
 	glfwGetCursorPos(win, &newx, &newy);
-	static double  x = newx, y = newy;
-	double xoffset = newx - x, yoffset = newy - y;
+	static double x = newx, y = newy;
+	double xoffset = newx - x;
+	double yoffset = newy - y;
 	x = newx;
 	y = newy;
+
 	camera.Move(dir, dt);
-	//camera.Rotate(xoffset, -yoffset);
+	camera.Rotate(xoffset, -yoffset);
 }
-bool rayBoxIntersection(const glm::vec3& rayOrigin, const glm::vec3& rayDirection, const glm::vec3& boxMin, const glm::vec3& boxMax)
+
+void OnScroll(GLFWwindow* win, double x, double y)
 {
-	glm::vec3 invDir = 1.0f / rayDirection; // вычисление обратного направления луча
-	glm::vec3 tMin = (boxMin - rayOrigin) * invDir; 
-	glm::vec3 tMax = (boxMax - rayOrigin) * invDir; 
-
-	glm::vec3 t1 = glm::min(tMin, tMax); // минимальные координаты пересечения
-	glm::vec3 t2 = glm::max(tMin, tMax); // максимальные координаты пересечения
-
-	float tNear = glm::max(glm::max(t1.x, t1.y), t1.z); //ближайшая точка пересечения с лучом
-	float tFar = glm::min(glm::min(t2.x, t2.y), t2.z); //дальняя точка пересечения с лучом
-
-	return tNear <= tFar;
+	camera.ChangeFOV(y);
+	std::cout << "Scrolled x: " << x << ", y: " << y << ". FOV = " << camera.Fov << std::endl;
 }
-struct Object {
-	ModelTransform transform;
-	unsigned int VAO;
-	unsigned int texture;
-	int numIndices;
-	bool shouldRemove = false;
-};
+
+bool wireframeMode = false;
+
+void UpdatePolygoneMode()
+{
+	if (wireframeMode)
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	else
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+}
+
+void OnKeyAction(GLFWwindow* win, int key, int scancode, int action, int mods)
+{
+	if (action == GLFW_PRESS)
+	{
+		switch (key)
+		{
+		case GLFW_KEY_SPACE:
+			wireframeMode = !wireframeMode;
+			UpdatePolygoneMode();
+			break;
+		}
+	}
+}
+
+typedef unsigned char byte;
+
 
 
 int main()
 {
-	Object objects[1000];
-#pragma region WIN INIT
+#pragma region WINDOW INITIALIZATION
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -165,192 +137,286 @@ int main()
 	GLFWwindow* win = glfwCreateWindow(1280, 720, "OpenGL Window", NULL, NULL);
 	if (win == NULL)
 	{
-		cout << "Error. No window!" << endl;
+		std::cout << "Error. Couldn't create window!" << std::endl;
 		glfwTerminate();
 		return -1;
 	}
 	glfwMakeContextCurrent(win);
 	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{
-		cout << "Error. No GLAD!" << endl;
+		std::cout << "Error. Couldn't load GLAD!" << std::endl;
 		glfwTerminate();
 		return -1;
 	}
-	glfwSetFramebufferSizeCallback(win, Resize);
-	glfwSetScrollCallback(win, onScroll);
-	glfwSetKeyCallback(win, onKeyAction);
-	
+
+	glfwSetFramebufferSizeCallback(win, OnResize);
+	glfwSetScrollCallback(win, OnScroll);
+	glfwSetKeyCallback(win, OnKeyAction);
+
 	glViewport(0, 0, 1280, 720);
 	glEnable(GL_DEPTH_TEST);
-	/*glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);*/
-	UpdatePolygonMode();
+	glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	UpdatePolygoneMode();
 	glEnable(GL_CULL_FACE);
-	glFrontFace(GL_CW); 
+	glFrontFace(GL_CCW);
+
 #pragma endregion
+
 	int box_width, box_height, channels;
 	byte* data = stbi_load("images\\box.png", &box_width, &box_height, &channels, 0);
-	const int verts = 8;
-	float cube[verts*8] = {
-		-1.0f, 1.0f, -1.0f,		1.0f, 0.0f, 0.0f,		0.f, 1.f,
-		1.0f, 1.0f, -1.0f,		0.5f, 0.5f, 0.0f,		1.f, 1.f,
-		1.0f, 1.0f, 1.0f,		0.0f, 1.0f, 0.0f,		1.f, 0.f,
-		-1.0f, 1.0f, 1.0f,		0.0f, 0.5f, 0.5f,		0.f, 0.f,
-		-1.0f, -1.0f, -1.0f,	0.0f, 0.0f, 1.0f,		1.f, 0.f,
-		1.0f, -1.0f, -1.0f,		0.5f, 0.0f, 0.5f,		0.f, 0.f,	
-		1.0f, -1.0f, 1.0f,		0.5f, 0.5f, 0.5f,		0.f, 1.f,
-		-1.0f, -1.0f, 1.0f,		1.0f, 1.0f, 1.0f,		1.f, 1.f
+
+
+	const int verts = 36;
+
+	float cube[] = {
+		//position			normal					texture				color			
+	-1.0f,-1.0f,-1.0f,	-1.0f,  0.0f,  0.0f,	0.0f, 0.0f,		0.0f, 1.0f, 0.0f,
+	-1.0f,-1.0f, 1.0f,	-1.0f,  0.0f,  0.0f,	1.0f, 0.0f,		0.0f, 1.0f, 0.0f,
+	-1.0f, 1.0f, 1.0f,	-1.0f,  0.0f,  0.0f,	1.0f, 1.0f,		0.0f, 1.0f, 0.0f,
+	-1.0f,-1.0f,-1.0f,	-1.0f,  0.0f,  0.0f,	0.0f, 0.0f,		0.0f, 1.0f, 0.0f,
+	-1.0f, 1.0f, 1.0f,	-1.0f,  0.0f,  0.0f,	1.0f, 1.0f,		0.0f, 1.0f, 0.0f,
+	-1.0f, 1.0f,-1.0f,	-1.0f,  0.0f,  0.0f,	0.0f, 1.0f,		0.0f, 1.0f, 0.0f,
+
+	1.0f, 1.0f,-1.0f,	0.0f,  0.0f, -1.0f, 	0.0f, 1.0f,		1.0f, 0.0f, 0.0f,
+	-1.0f,-1.0f,-1.0f,	0.0f,  0.0f, -1.0f, 	1.0f, 0.0f,		1.0f, 0.0f, 0.0f,
+	-1.0f, 1.0f,-1.0f,	0.0f,  0.0f, -1.0f, 	1.0f, 1.0f,		1.0f, 0.0f, 0.0f,
+	1.0f, 1.0f,-1.0f,	0.0f,  0.0f, -1.0f,		0.0f, 1.0f,		1.0f, 0.0f, 0.0f,
+	1.0f,-1.0f,-1.0f,	0.0f,  0.0f, -1.0f,		0.0f, 0.0f,		1.0f, 0.0f, 0.0f,
+	-1.0f,-1.0f,-1.0f,	0.0f,  0.0f, -1.0f,		1.0f, 0.0f,		1.0f, 0.0f, 0.0f,
+
+	1.0f,-1.0f, 1.0f,	0.0f, -1.0f,  0.0f,		0.0f, 0.0f,		0.0f, 0.0f, 1.0f,
+	-1.0f,-1.0f,-1.0f,	0.0f, -1.0f,  0.0f,		1.0f, 1.0f,		0.0f, 0.0f, 1.0f,
+	1.0f,-1.0f,-1.0f,	0.0f, -1.0f,  0.0f,		0.0f, 1.0f,		0.0f, 0.0f, 1.0f,
+	1.0f,-1.0f, 1.0f,	0.0f, -1.0f,  0.0f,		0.0f, 0.0f,		0.0f, 0.0f, 1.0f,
+	-1.0f,-1.0f, 1.0f,	0.0f, -1.0f,  0.0f,		1.0f, 0.0f,		0.0f, 0.0f, 1.0f,
+	-1.0f,-1.0f,-1.0f,	0.0f, -1.0f,  0.0f,		1.0f, 1.0f,		0.0f, 0.0f, 1.0f,
+
+	-1.0f, 1.0f, 1.0f,	0.0f,  0.0f, 1.0f,		0.0f, 1.0f,		0.0f, 0.0f, 1.0f,
+	-1.0f,-1.0f, 1.0f,	0.0f,  0.0f, 1.0f,		0.0f, 0.0f,		0.0f, 0.0f, 1.0f,
+	1.0f,-1.0f, 1.0f,	0.0f,  0.0f, 1.0f,		1.0f, 0.0f,		0.0f, 0.0f, 1.0f,
+	1.0f, 1.0f, 1.0f,	0.0f,  0.0f, 1.0f,		1.0f, 1.0f,		0.0f, 0.0f, 1.0f,
+	-1.0f, 1.0f, 1.0f,	0.0f,  0.0f, 1.0f,		0.0f, 1.0f,		0.0f, 0.0f, 1.0f,
+	1.0f,-1.0f, 1.0f,	0.0f,  0.0f, 1.0f,		1.0f, 0.0f,		0.0f, 0.0f, 1.0f,
+
+	1.0f, 1.0f, 1.0f,	1.0f,  0.0f,  0.0f,		0.0f, 1.0f,		1.0f, 0.0f, 0.0f,
+	1.0f,-1.0f,-1.0f,	1.0f,  0.0f,  0.0f,		1.0f, 0.0f,		1.0f, 0.0f, 0.0f,
+	1.0f, 1.0f,-1.0f,	1.0f,  0.0f,  0.0f,		1.0f, 1.0f,		1.0f, 0.0f, 0.0f,
+	1.0f,-1.0f,-1.0f,	1.0f,  0.0f,  0.0f,		1.0f, 0.0f,		1.0f, 0.0f, 0.0f,
+	1.0f, 1.0f, 1.0f,	1.0f,  0.0f,  0.0f,		0.0f, 1.0f,		1.0f, 0.0f, 0.0f,
+	1.0f,-1.0f, 1.0f,	1.0f,  0.0f,  0.0f,		0.0f, 0.0f,		1.0f, 0.0f, 0.0f,
+
+	1.0f, 1.0f, 1.0f,	0.0f,  1.0f,  0.0f,		1.0f, 0.0f,		0.0f, 1.0f, 0.0f,
+	1.0f, 1.0f,-1.0f,	0.0f,  1.0f,  0.0f,		1.0f, 1.0f,		0.0f, 1.0f, 0.0f,
+	-1.0f, 1.0f,-1.0f,	0.0f,  1.0f,  0.0f,		0.0f, 1.0f,		0.0f, 1.0f, 0.0f,
+	1.0f, 1.0f, 1.0f,	0.0f,  1.0f,  0.0f,		1.0f, 0.0f,		0.0f, 1.0f, 0.0f,
+	-1.0f, 1.0f,-1.0f,	0.0f,  1.0f,  0.0f,		0.0f, 1.0f,		0.0f, 1.0f, 0.0f,
+	-1.0f, 1.0f, 1.0f,	0.0f,  1.0f,  0.0f,		0.0f, 0.0f,		0.0f, 1.0f, 0.0f
 	};
 
-	unsigned int indices[] = {
-		0, 1, 3,
-		1, 2, 3,
-		0, 4, 1,
-		1, 4, 5,
-		0, 3, 7,
-		0, 7, 4,
-		1, 6, 2,
-		1, 5, 6,
-		2, 7, 3,
-		2, 6, 7,
-		4, 7, 5,
-		5, 7, 6
-	};
-	ModelTransform pol[1000];
-	for (auto &i : pol)
-		i = { glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(1.0f, 1.0f, 1.0f) };
+	/*unsigned int indices[] = {
+		0,1,3,
+		1,2,3,
+		0,4,1,
+		1,4,5,
+		0,3,7,
+		0,7,4,
+		1,6,2,
+		1,5,6,
+		2,7,3,
+		2,6,7,
+		4,7,5,
+		5,7,6
+	};*/
+	const int cube_count = 100;
+	ModelTransform cubeTrans[cube_count];
+	int cubeMat[cube_count];
+	Material cubeMaterials[3] = {
 
+		{
+			glm::vec3(0.25, 0.20725, 0.20725),
+			glm::vec3(1, 0.829, 0.829),
+			glm::vec3(0.296648, 0.296648, 0.296648),
+			12.f
+		}, //pearl
+		{
+			glm::vec3(0.25, 0.25, 0.25),
+			glm::vec3(0.4, 0.4, 0.4),
+			glm::vec3(0.774597, 0.774597, 0.774597),
+			77.f
+		}, //chrome
+		{
+			glm::vec3(0.1745, 0.01175, 0.01175),
+			glm::vec3(0.61424, 0.4136, 0.4136),
+			glm::vec3(0.72811, 0.626959, 0.626959),
+			77.f
+		} //demon
+	};
+	for (int i = 0; i < cube_count; i++)
+	{
+		float sc = (rand() % 6 + 1) / 20.0f;
+		cubeTrans[i] = { 
+							glm::vec3((rand() % 201 - 100) / 50.0f, (rand() % 201 - 100) / 50.0f, (rand() % 201 - 100) / 50.0f),	// position
+							glm::vec3(rand() / 100.0f, rand() / 100.0f, rand() / 100.0f),	// rotation
+							glm::vec3(sc, sc, sc) // scale
+		};
+		cubeMat[i] = rand() % 3;
+	}
+
+
+
+
+	ModelTransform lightTrans = { glm::vec3(0.f, 0.f, 0.f),	// position
+									glm::vec3(0.f, 0.f, 0.f),	// rotation
+									glm::vec3(0.1f, 0.1f, 0.1f) };	// scale
+
+	
 #pragma region BUFFERS INITIALIZATION
 	unsigned int box_texture;
 	glGenTextures(1, &box_texture);
 
 	glBindTexture(GL_TEXTURE_2D, box_texture);
+
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	if(channels == 3)
+
+	if (channels == 3)
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, box_width, box_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
 	else
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, box_width, box_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, box_width, box_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
 	//glGenerateMipmap(GL_TEXTURE_2D);
 	stbi_image_free(data);
 
-	//полигоны
-	unsigned int VBO_polygon, VAO_polygon,  EBO_polygon;
+	unsigned int VBO_polygon, VAO_polygon;
 	glGenBuffers(1, &VBO_polygon);
-	glGenBuffers(1, &EBO_polygon);
 	glGenVertexArrays(1, &VAO_polygon);
 
 	glBindVertexArray(VAO_polygon);
-	//загрузка вбо
 	glBindBuffer(GL_ARRAY_BUFFER, VBO_polygon);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * verts * 8, cube, GL_STATIC_DRAW);
-	
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO_polygon);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int) * 36, indices, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(cube), cube, GL_STATIC_DRAW);
 
-
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+	// position
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+
+	// normal
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3 * sizeof(float)));
 	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+
+	// texture coords
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6 * sizeof(float)));
 	glEnableVertexAttribArray(2);
+
+	// color
+	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8 * sizeof(float)));
+	glEnableVertexAttribArray(3);
+
 #pragma endregion
-	Shader* polygon_shader = new Shader("Shaders\\basic.vert", "Shaders\\basic.frag");
-	
+
+	Shader* polygon_shader = new Shader("shaders\\basic.vert", "shaders\\basic.frag");
+	Shader* light_shader = new Shader("shaders\\light.vert", "shaders\\light.frag");
+
 	double oldTime = glfwGetTime(), newTime, deltaTime;
-	glm::vec3 dir;
-	float zpos = 0;
-	for (auto &i : pol)
-	{
-		i.setScale(0.2f);
-		i.pos.z += zpos;
-		zpos += 0.5;
-	}
-	auto startTime = chrono::high_resolution_clock::now();
+
+
+	PointLight light1 = {	glm::vec3(0.0f, 0.0f, 0.0f),
+						glm::vec3(0.4f, 0.4f, 0.4f),
+						glm::vec3(1.0f, 1.0f, 1.0f),
+						glm::vec3(3.0f, 3.0f, 3.0f),
+		0.9f, 0.1f, 0.09f
+	};
+
+	double a, b;
+	glfwGetCursorPos(win, &a, &b);
+	std::cout << a << " " << b << "\n";
+
 	while (!glfwWindowShouldClose(win))
 	{
-		//fps
 		newTime = glfwGetTime();
 		deltaTime = newTime - oldTime;
 		oldTime = newTime;
 
-		auto currentTime = chrono::high_resolution_clock::now();
-		float time = chrono::duration<float>(currentTime - startTime).count();
+		processInput(win, deltaTime);
 
-		processInput(win, deltaTime, dir);
+		//light1.position.x = 2.f; //* cos(glfwGetTime() * 1.2f);
+		//light1.position.y = 0.0f;
+		//light1.position.z = 2.f; //* sin(glfwGetTime() * 1.2f);;
+		lightTrans.position = light1.position;
 
+		
 		glClearColor(background.r, background.g, background.b, background.a);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+		
 
-		polygon_shader->use();
+		glm::mat4 p = camera.GetProjectionMatrix();
+		glm::mat4 v = camera.GetViewMatrix();
+		glm::mat4 pv = p * v;
 
-		glm::mat4 pv = camera.GetProjectionMatrix() * camera.GetViewMatrix();
-
-		for (size_t index = 0; index < sizeof(objects) / sizeof(objects[0]); index++)
+		glm::mat4 model;
+		for (int i = 0; i < cube_count; i++)
 		{
-			auto& obj = objects[index];
-			obj.transform = pol[index];
-			obj.texture = box_texture;
-			obj.numIndices = 36;
-		}
+			model = glm::mat4(1.0f);
 
-		// Цикл рендеринга
-		for (int i = 0; i < 1000; i++) {
-			Object& obj = objects[i];
-			if (objects[i].shouldRemove)
-				continue;
+			model = glm::translate(model, cubeTrans[i].position);
+			model = glm::rotate(model, glm::radians(cubeTrans[i].rotation.x), glm::vec3(1.f, 0.f, 0.f));
+			model = glm::rotate(model, glm::radians(cubeTrans[i].rotation.y), glm::vec3(0.f, 1.f, 0.f));
+			model = glm::rotate(model, glm::radians(cubeTrans[i].rotation.z), glm::vec3(0.f, 0.f, 1.f));
+			model = glm::scale(model, cubeTrans[i].scale);
 
-			
-			glm::mat4 model = glm::mat4(1.0f);
-			model = glm::translate(model, obj.transform.pos);
-			model = glm::rotate(model, glm::radians(obj.transform.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-			model = glm::rotate(model, glm::radians(obj.transform.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-			model = glm::rotate(model, glm::radians(obj.transform.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-			model = glm::scale(model, obj.transform.scale);
-
-			glm::mat4 pvm = pv * model;
-			glm::vec3 distance = obj.transform.pos - camera.Position;
-
-			polygon_shader->SetMatrix4F("pvm", pvm);
-			polygon_shader->setFloat("time", time);
+			polygon_shader->use();
+			polygon_shader->SetMatrix4F("pv", pv);
+			polygon_shader->SetMatrix4F("m", model);
 			polygon_shader->setBool("wireframeMode", wireframeMode);
+			polygon_shader->setVec3("viewPos", camera.Position);
 
-			glBindTexture(GL_TEXTURE_2D, obj.texture);
+			polygon_shader->setVec3("light.ambient", light1.ambient);
+			polygon_shader->setVec3("light.diffuse", light1.diffuse);
+			polygon_shader->setVec3("light.specular", light1.specular);
+			polygon_shader->setVec3("light.position", light1.position);
+			polygon_shader->setFloat("light.constant", light1.constant);
+			polygon_shader->setFloat("light.linear", light1.linear);
+			polygon_shader->setFloat("light.quadratic", light1.quadratic);
+
+			polygon_shader->setVec3("material.ambient", cubeMaterials[cubeMat[i]].ambient);
+			polygon_shader->setVec3("material.diffuse", cubeMaterials[cubeMat[i]].diffuse);
+			polygon_shader->setVec3("material.specular", cubeMaterials[cubeMat[i]].specular);
+			polygon_shader->setFloat("material.shininess", cubeMaterials[cubeMat[i]].shininess);
+
+
+			glBindTexture(GL_TEXTURE_2D, box_texture);
 			glBindVertexArray(VAO_polygon);
-			glDrawElements(GL_TRIANGLES, obj.numIndices, GL_UNSIGNED_INT, 0);
+			glDrawArrays(GL_TRIANGLES, 0, 36);
 		}
-		if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
-		{
-			auto start = std::chrono::high_resolution_clock::now();
-			for (int i = 0; i < 1000; i++)
-			{
-				Object& obj = objects[i];
+		
 
-				if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
-				{
-					bool intersects = rayBoxIntersection(camera.Position, dir, obj.transform.pos - obj.transform.scale, obj.transform.pos + obj.transform.scale);
-					if (intersects)
-					{
-						//cout << i << endl;
-						intersects = false;
-						objects[i].shouldRemove = true;
-					}
 
-				}
-			}
+		// light
+		model = glm::mat4(1.0f);
+		model = glm::translate(model, lightTrans.position);
+		model = glm::rotate(model, glm::radians(lightTrans.rotation.x), glm::vec3(1.f, 0.f, 0.f));
+		model = glm::rotate(model, glm::radians(lightTrans.rotation.y), glm::vec3(0.f, 1.f, 0.f));
+		model = glm::rotate(model, glm::radians(lightTrans.rotation.z), glm::vec3(0.f, 0.f, 1.f));
+		model = glm::scale(model, lightTrans.scale);
 
-			auto end = std::chrono::high_resolution_clock::now();
-			std::chrono::duration<double> duration = end - start;
-			std::cout << "Execution time: " << duration.count()*1000 << " milliseconds." << std::endl;
-		}
+		light_shader->use();
+		light_shader->SetMatrix4F("pv", pv);
+		light_shader->SetMatrix4F("m", model);
+		light_shader->setVec3("lightColor", light1.specular);
+
+
+		//glBindVertexArray(VAO_polygon);
+		glBindVertexArray(VAO_polygon);
+		glDrawArrays(GL_TRIANGLES, 0, 36);
+
+
 		glfwSwapBuffers(win);
 		glfwPollEvents();
 	}
+
 	delete polygon_shader;
+
 	glfwTerminate();
 	return 0;
 }

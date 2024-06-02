@@ -5,6 +5,20 @@ unsigned int Shader::ID()
 	return programID;
 }
 
+
+
+
+
+void Shader::setVec3(const std::string& name, glm::vec3 vec) const
+{
+	glUniform3f(glGetUniformLocation(programID, name.c_str()), vec[0], vec[1], vec[2]);
+}
+void Shader::setVec4(const std::string& name, glm::vec4 vec) const
+{
+	glUniform4f(glGetUniformLocation(programID, name.c_str()), vec.x, vec.y, vec.z, vec.w);
+}
+
+
 void Shader::SetMatrix4F(const std::string& name, glm::mat4& m) const
 {
 	glUniformMatrix4fv(glGetUniformLocation(programID, name.c_str()), 1, GL_FALSE, glm::value_ptr(m));
